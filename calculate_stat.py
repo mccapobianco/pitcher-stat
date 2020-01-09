@@ -220,32 +220,26 @@ def season_change_in_re(player_id, year, re_matrix, hp_matrix, model):
 	"""calculates the expected change in run expectency for the entire season"""
 	df = get_pitcher_stats(player_id, year)
 	re = 0
-	error = 0
 	for index, row in df.iterrows():
-		try:
-			#skip if event is NaN
-			#TODO filter out before iteration
-			#TODO is type is 'X' (maybe, this is only for batted balls)
-			if type(row['type']) == 'X':
-				re += change_in_re(row, re_matrix, hp_matrix, model)
-			#skip if event is a caught stealing
-			#TODO filter out before iteration
-			# elif row['events'] in ['caught_stealing_2b', 'caught_stealing_3b']:
-			# 	continue
-			#if strikeout, add strikeout change in run expectancy
-			#TODO would this work? : elif 'strikeout' in row['events']
-			elif row['events'] in ['strikeout', 'strikeout_double_play']:
-				re += strikeout(re_matrix, row)
-			#if bb or hbp, add walk change in run expectancy 
-			elif row['events'] in ['walk', 'hit_by_pitch']:
-				re += walk(re_matrix, row)
-			#if ball is put in play
-			else:
-				continue
-		except (ValueError, KeyError):
-			#TODO clean data/predict missing values
-			error += 1
-	return re, error
+		#if ball is put in play
+		#TODO filter out before iteration
+		if type(row['type']) == 'X':
+			re += change_in_re(row, re_matrix, hp_matrix, model)
+		#skip if event is a caught stealing
+		#TODO filter out before iteration
+		# elif row['events'] in ['caught_stealing_2b', 'caught_stealing_3b']:
+		# 	continue
+		#if strikeout, add strikeout change in run expectancy
+		#TODO would this work? : elif 'strikeout' in row['events']
+		elif row['events'] in ['strikeout', 'strikeout_double_play']:
+			re += strikeout(re_matrix, row)
+		#if bb or hbp, add walk change in run expectancy 
+		elif row['events'] in ['walk', 'hit_by_pitch']:
+			re += walk(re_matrix, row)
+		#if pitch does not matter
+		else:
+			continue
+	return re
 
 def calculate(player_id, year, re_matrix, hp_matrix, model):
 	"""calculate stat for one player"""
@@ -263,25 +257,28 @@ def calculate_all(year, player_table, progress=0):
 		widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage(), ' | ', progressbar.ETA()])
 	bar.start()
 	stats = []
-	error = []
 	for index, row in list(table.iterrows()):
 		calc = calculate(row['mlb_id'], year, re_matrix, hp_matrix, model)
-		stats.append(calc[0])
-		error.append(calc[1])
+		stats.append(calc)
 		bar.update(index+1)
 	bar.update(row_count)
 	table['Value'] = stats
-	error = sum(error)
 	table.rename(columns={"mlb_name":"Name"}, inplace=True)
 	table.sort_values(by="Value", inplace=True, ascending=False)
 	table.index = np.arange(1,len(table)+1) #start index at 1 instead of 0
-	return table, error
+	return table
 
 def export_values(calc_table, filename='values.csv'):
 	"""export all players stats to a csv file"""
-	with open(filename, 'w', newline='') as file:
-		file.write(calc_table.to_csv())
-
+	try:
+		with open(filename, 'w', newline='') as file:
+			file.write(calc_table.to_csv())
+	#if file is open, this error occurs. Try exporting again
+	except (PermissionError):
+		x = input('Error exported values. Enter a filename to export to or hit Enter to try the same filename again.')
+		if not x:
+			x = filename
+		export_values(calc_table, x)
 #TODO delete
 # name = input('Enter pitcher name: ')
 # year = input('Enter year: ')
@@ -291,7 +288,6 @@ def export_values(calc_table, filename='values.csv'):
 
 start = time.time()
 print("Calculating all pitchers' values. This should take several minutes")
-calc_table, error = calculate_all(2019, get_player_table())
+calc_table = calculate_all(2019, get_player_table())
 export_values(calc_table)
 print('\nDone in {} seconds'.format(int(np.ceil(time.time()-start))))
-print(str(error), 'values omitted')
