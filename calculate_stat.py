@@ -8,6 +8,7 @@ import progressbar
 from pybaseball import playerid_lookup
 from pybaseball import schedule_and_record
 from pybaseball import statcast_pitcher
+from pybaseball import statcast
 import re
 import sys
 import time
@@ -91,7 +92,7 @@ def get_re_from_mat(matrix, outs, runner1, runner2, runner3):
 	"""gets run expectation for a situation"""
 	runners = runner1 + 2*runner2 + 4*runner3
 	keys = ['0 Outs', '1 Out', '2 Outs']
-	return matrix[keys[outs]][runners]
+	return matrix[keys[int(outs)]][runners]
 
 def runner_float2bool(runner):
 	"""converts a runner value to a boolean (true if base is occupied)"""
@@ -273,12 +274,53 @@ def export_values(calc_table, filename='values.csv'):
 	try:
 		with open(filename, 'w', newline='') as file:
 			file.write(calc_table.to_csv())
-	#if file is open, this error occurs. Try exporting again
+	#if file is open, this error occurs. Try exporting again	
 	except (PermissionError):
 		x = input('Error exported values. Enter a filename to export to or hit Enter to try the same filename again.')
 		if not x:
 			x = filename
 		export_values(calc_table, x)
+
+def season_change_2(statcast_data, re_matrix, model):
+	values = {}
+	for index, row in statcast_data.iterrows():
+		if type(row['type']) == 'X':
+			val = change_in_re(row, re_matrix, hp_matrix, model)
+			add_to_dict(values, row['pitcher'], val)
+		elif row['events'] in ['strikeout', 'strikeout_double_play']:
+			val = strikeout(re_matrix, row)
+			add_to_dict(values, row['pitcher'], val)
+		#if bb or hbp, add walk change in run expectancy 
+		elif row['events'] in ['walk', 'hit_by_pitch']:
+			val = walk(re_matrix, row)
+			add_to_dict(values, row['pitcher'], val)
+		#if pitch does not matter
+		else:
+			continue
+	return pd.DataFrame([(key, values[key]) for key in values.keys()], columns=['id', 'Value'])
+
+def add_to_dict(d, key, value):
+	if key in d.keys():
+		d[key] += value
+	else:
+		d[key] = value
+
+def calc2():
+	statcast_data = statcast('2019-04-01')#3-15', '2019-09-29')
+	re_matrix = load_re_matrix()
+	model = load_model()
+	values = season_change_2(statcast_data, re_matrix, model)
+	ids = get_id_table()
+	table = pd.merge(values, ids, how='inner', left_on=['id'], right_on=['mlb_id'])
+	table.rename(columns={"mlb_name":"Name"}, inplace=True)
+	table.sort_values(by="Value", inplace=True, ascending=False)
+	print(table.columns)
+	table = table[['Name', 'Value']]
+	table.index = np.arange(1,len(table)+1)
+	return table
+
+
+
 #TODO delete
 # name = input('Enter pitcher name: ')
 # year = input('Enter year: ')
@@ -286,8 +328,14 @@ def export_values(calc_table, filename='values.csv'):
 # re, error = calculate(names[1], names[0],year) if ' ' in name else calculate(names, None, year)
 # print(name+"'s", str(year), "value is {:0.4f} (".format(re)+str(error), 'data points excluded)')
 
+# start = time.time()
+# print("Calculating all pitchers' values. This should take several minutes")
+# calc_table = calculate_all(2019, get_player_table())
+# export_values(calc_table)
+# print('\nDone in {} seconds'.format(int(np.ceil(time.time()-start))))
+
 start = time.time()
 print("Calculating all pitchers' values. This should take several minutes")
-calc_table = calculate_all(2019, get_player_table())
-export_values(calc_table)
+calc_table = calc2()
+export_values(calc_table, 'values2.csv')
 print('\nDone in {} seconds'.format(int(np.ceil(time.time()-start))))
