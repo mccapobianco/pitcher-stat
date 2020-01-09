@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import progressbar
 from pybaseball import playerid_lookup
+from pybaseball import schedule_and_record
 from pybaseball import statcast_pitcher
 import re
 import sys
@@ -15,9 +16,16 @@ import time
 def get_pitcher_stats(player_id, year):
 	""" returns a DataFrame containing data for all pitches that a pitcher threw in a year"""
 	sys.stdout = open(os.devnull, "w") #prevent statcast_pitcher from printing to console
-	stats = statcast_pitcher(str(year)+'-01-01', str(year)+'-12-31', player_id) 
+	stats = statcast_pitcher(str(year)+'-01-01', last_day(year), player_id) 
 	sys.stdout = sys.__stdout__ #allow printing to console
 	return stats
+
+def last_day(year, team='NYY'):
+	"""returns the last day of the regular season"""
+	last_day_str=list(schedule_and_record(year, team)['Date'])[-1]
+	last_day = time.strptime(last_day_str+', '+str(year), '%A, %b %d, %Y')
+	last_day_str = time.strftime('%Y-%m-%d', last_day)
+	return last_day_str
 
 def get_id_table(): #player_ids from http://crunchtimebaseball.com/baseball_map.html
 	table = pd.read_csv('player_ids.csv', encoding='latin-1')
