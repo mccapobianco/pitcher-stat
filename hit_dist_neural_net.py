@@ -58,8 +58,16 @@ def load_model(filename='model.h5'):
 	model.load_weights(filename)
 	return model
 
+def user_input(model):
+	res = input('Save this model (Overwrite last model)')
+	if res == 'y':
+		save_model(model)
+	elif res == 'n':
+		pass
+	else:
+		print('Input not understood.')
+		user_input(model)
+
 if __name__ == '__main__':
-	sys.stdout = open(os.devnull, "w") #prevent keras from printing to console
 	model = train_model()
-	save_model(model) 
-	sys.stdout = sys.__stdout__ #allow printing to console
+	user_input(model)
