@@ -9,6 +9,7 @@ from pybaseball import playerid_lookup
 from pybaseball import schedule_and_record
 from pybaseball import statcast_pitcher
 from pybaseball import statcast
+import league_pitching_stats_with_ids as pitching_stats
 import re
 import sys
 import time
@@ -306,16 +307,23 @@ def add_to_dict(d, key, value):
 		d[key] = value
 
 def calc2():
-	statcast_data = statcast('2019-04-01')#3-15', '2019-09-29')
+	statcast_data = statcast('2019-03-15', '2019-09-29')
 	re_matrix = load_re_matrix()
 	model = load_model()
 	values = season_change_2(statcast_data, re_matrix, model)
 	ids = get_id_table()
 	table = pd.merge(values, ids, how='inner', left_on=['id'], right_on=['mlb_id'])
-	table.rename(columns={"mlb_name":"Name"}, inplace=True)
+	stats = pitching_stats.pitching_stats_bref(2019)
+	table = pd.merge(table, stats, left_on=['id'], right_on=['mlb_ID'])
+	table = table[['Name', 'Value', 'G', 'IP', "BF"]]
+	val_g = table['Value']/table['G']
+	val_ip = table['Value']/table['IP']
+	val_bf = table['Value']/table['BF']
+	table['Value/G'] = val_g
+	table['Value/IP'] = val_ip
+	table['Value/BF'] = val_bf
+	table = table[['Name', 'Value', 'G', 'Value/G', 'IP', 'Value/IP', "BF", 'Value/BF']]
 	table.sort_values(by="Value", inplace=True, ascending=False)
-	print(table.columns)
-	table = table[['Name', 'Value']]
 	table.index = np.arange(1,len(table)+1)
 	return table
 
