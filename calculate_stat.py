@@ -216,7 +216,9 @@ def strikeout(re_matrix, pitch_data):
 def walk(re_matrix, pitch_data):
 	"""returns the change in run expectancy follwing a walk"""
 	outs, runner1, runner2, runner3 = get_outs_and_runners(pitch_data)
-	return get_re_from_mat(re_matrix, outs, runner1, runner2, runner3)-get_re_from_mat(re_matrix, outs, True, runner1, runner2)+runner3
+	before = get_re_from_mat(re_matrix, outs, runner1, runner2, runner3)
+	after = get_re_from_mat(re_matrix, outs, True, runner1, runner1 and runner2)-int(runner1 and runner2 and runner3)
+	return before-after
 
 def season_change_in_re(player_id, year, re_matrix, hp_matrix, model):
 	"""calculates the expected change in run expectency for the entire season"""
@@ -316,6 +318,7 @@ def calc2():
 	stats = pitching_stats.pitching_stats_bref(2019)
 	table = pd.merge(table, stats, left_on=['id'], right_on=['mlb_ID'])
 	table = table[['Name', 'Value', 'G', 'IP', "BF"]]
+	#TODO fix division (6.1 IP = 6+1/3 IP)
 	val_g = table['Value']/table['G']
 	val_ip = table['Value']/table['IP']
 	val_bf = table['Value']/table['BF']
