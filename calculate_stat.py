@@ -47,12 +47,6 @@ def load_re_matrix():
 	"""run expectation matrix"""
 	return pd.read_csv('re_matrix.csv', delimiter='\t', index_col=0)
 
-def load_hp_matrix():
-	"""hit probability matrix"""
-	df = pd.read_csv('hit_prob_matrix.csv', delimiter=',', index_col=0)
-	df.columns = df.columns.astype(int)
-	return df
-
 def get_re_from_mat(matrix, outs, runner1, runner2, runner3):
 	"""gets run expectation for a situation"""
 	runners = runner1 + 2*runner2 + 4*runner3
@@ -84,17 +78,11 @@ def get_start_re(pitch_data, re_matrix):
 	outs, runner1, runner2, runner3 = get_outs_and_runners(pitch_data)
 	return get_re_from_mat(re_matrix, outs, runner1, runner2, runner3)
 
-def get_hp_data(hp_matrix, velo, angle):
-	"""gets the hit distribution from angle & velo"""
-	val = hp_matrix[velo][angle]
-	tup = ast.literal_eval(val)
-	return tuple(int(x) for x in tup)
-
 def get_hp_data_from_nn(model, velo, angle):
 	data = np.array([velo, angle]).reshape(1,-1)
 	return model.predict(data)
 
-def get_end_re(pitch_data, re_matrix, hp_matrix, model):
+def get_end_re(pitch_data, re_matrix, model):
 	"""gets run expectancy after a batted ball"""
 	outs, runner1, runner2, runner3 = get_outs_and_runners(pitch_data)
 	o, r1, r2, r3, runs = single(outs, runner1, runner2, runner3)
@@ -114,16 +102,15 @@ def get_end_re(pitch_data, re_matrix, hp_matrix, model):
 		out_re = get_re_from_mat(re_matrix, o, r1, r2, r3) + runs
 	velo, angle = get_velo_and_angle(pitch_data)
 	hp_data = get_hp_data_from_nn(model, velo, angle)
-	#TODO phase out hp_matrix
 	out_rate, single_rate, double_rate, triple_rate, homerun_rate = hp_data
 	#expected value: E(X) = ∑(X * P(X))
 	exp_re = single_re*single_rate + double_re*double_rate + triple_re*triple_rate + homerun_re*homerun_rate + out_re*out_rate
 	return exp_re
 
-def change_in_re(pitch_data, re_matrix, hp_matrix, model):
+def change_in_re(pitch_data, re_matrix, model):
 	"""calculcate change in run expectancy from the beginning to the end of a plate appearance"""
 	start = get_start_re(pitch_data, re_matrix)
-	end = get_end_re(pitch_data, re_matrix, hp_matrix, model)
+	end = get_end_re(pitch_data, re_matrix, model)
 	delta = start - end #subtract this way so that higher number is better
 	return delta
 
@@ -194,7 +181,7 @@ def season_change_2(statcast_data, re_matrix, model):
 	values = {}
 	for index, row in statcast_data.iterrows():
 		if type(row['type']) == 'X':
-			val = change_in_re(row, re_matrix, hp_matrix, model)
+			val = change_in_re(row, re_matrix, model)
 			add_to_dict(values, row['pitcher'], val)
 		elif row['events'] in ['strikeout', 'strikeout_double_play']:
 			val = strikeout(re_matrix, row)
@@ -214,7 +201,7 @@ def add_to_dict(d, key, value):
 	else:
 		d[key] = value
 
-def calc2():
+def calculate():
 	statcast_data = statcast('2019-03-15', '2019-09-29')
 	re_matrix = load_re_matrix()
 	model = load_model()
@@ -239,6 +226,6 @@ def calc2():
 
 start = time.time()
 print("Calculating all pitchers' values. This should take several minutes")
-calc_table = calc2()
+calc_table = calculate()
 export_values(calc_table)
 print('\nDone in {} seconds'.format(int(np.ceil(time.time()-start))))
