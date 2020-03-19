@@ -1,8 +1,10 @@
+
 #expected change in run expectency
 import ast
 from hit_dist_neural_net import load_model
 import numpy as np
 import os
+from mock_model import mock_model
 import pandas as pd
 import progressbar
 from pybaseball import playerid_lookup
@@ -13,6 +15,8 @@ import league_pitching_stats_with_ids as pitching_stats
 import re
 import sys
 import time
+
+i=0
 
 def last_day(year, team='NYY'):
 	"""returns the last day of the regular season"""
@@ -58,9 +62,12 @@ def runner_float2bool(runner):
 	return not np.isnan(runner)
 
 def get_velo_and_angle(pitch_data):
-	velo = pitch_data['launch_speed']
-	angle = pitch_data['launch_angle']
-	return round(velo), round(angle)
+	try:
+		velo = pitch_data['launch_speed']
+		angle = pitch_data['launch_angle']
+		return round(velo), round(angle)
+	except:
+		return None
 
 def get_runners(pitch_data):
 	runner1 = runner_float2bool(pitch_data['on_1b'])
@@ -79,7 +86,7 @@ def get_start_re(pitch_data, re_matrix):
 	return get_re_from_mat(re_matrix, outs, runner1, runner2, runner3)
 
 def get_hp_data_from_nn(model, velo, angle):
-	data = np.array([velo, angle]).reshape(1,-1)
+	data = np.array([angle, velo]).reshape(1,-1)
 	return model.predict(data)
 
 def get_end_re(pitch_data, re_matrix, model):
@@ -102,7 +109,7 @@ def get_end_re(pitch_data, re_matrix, model):
 		out_re = get_re_from_mat(re_matrix, o, r1, r2, r3) + runs
 	velo, angle = get_velo_and_angle(pitch_data)
 	hp_data = get_hp_data_from_nn(model, velo, angle)
-	out_rate, single_rate, double_rate, triple_rate, homerun_rate = hp_data
+	out_rate, single_rate, double_rate, triple_rate, homerun_rate = hp_data[0]
 	#expected value: E(X) = ∑(X * P(X))
 	exp_re = single_re*single_rate + double_re*double_rate + triple_re*triple_rate + homerun_re*homerun_rate + out_re*out_rate
 	return exp_re
@@ -180,19 +187,21 @@ def export_values(calc_table, filename='values.csv'):
 def season_change_2(statcast_data, re_matrix, model):
 	values = {}
 	for index, row in statcast_data.iterrows():
-		if type(row['type']) == 'X':
-			val = change_in_re(row, re_matrix, model)
-			add_to_dict(values, row['pitcher'], val)
-		elif row['events'] in ['strikeout', 'strikeout_double_play']:
-			val = strikeout(re_matrix, row)
-			add_to_dict(values, row['pitcher'], val)
-		#if bb or hbp, add walk change in run expectancy 
-		elif row['events'] in ['walk', 'hit_by_pitch']:
-			val = walk(re_matrix, row)
-			add_to_dict(values, row['pitcher'], val)
-		#if pitch does not matter
-		else:
-			continue
+		try:
+			if row['type'] == 'X':
+				if 'bunt' in row['des'].lower():
+					continue
+				val = change_in_re(row, re_matrix, model)
+				add_to_dict(values, row['pitcher'], val)
+			elif row['events'] in ['strikeout', 'strikeout_double_play']:
+				val = strikeout(re_matrix, row)
+				add_to_dict(values, row['pitcher'], val)
+			#if bb or hbp, add walk change in run expectancy 
+			elif row['events'] in ['walk', 'hit_by_pitch']:
+				val = walk(re_matrix, row)
+				add_to_dict(values, row['pitcher'], val)
+		except:
+			print('---here---')
 	return pd.DataFrame([(key, values[key]) for key in values.keys()], columns=['id', 'Value'])
 
 def add_to_dict(d, key, value):
@@ -201,8 +210,12 @@ def add_to_dict(d, key, value):
 	else:
 		d[key] = value
 
+def get_statcast_data():
+	dfs = [pd.read_csv('data/statcast_data{}.csv'.format(i)) for i in range(3,10)]
+	return pd.concat(dfs)
+
 def calculate():
-	statcast_data = statcast('2019-03-15', '2019-09-29')
+	statcast_data = get_statcast_data()
 	re_matrix = load_re_matrix()
 	model = load_model()
 	values = season_change_2(statcast_data, re_matrix, model)

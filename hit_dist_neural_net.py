@@ -1,10 +1,10 @@
 import os
 import sys
-stderr = sys.stderr
-sys.stderr = open(os.devnull, 'w')
+# stderr = sys.stderr
+# sys.stderr = open(os.devnull, 'w')
 from keras.models import Sequential
 from keras.layers import Dense
-sys.stderr = stderr
+# sys.stderr = stderr
 import pandas as pd
 import numpy as np
 import ast
